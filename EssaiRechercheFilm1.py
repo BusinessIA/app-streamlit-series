@@ -1,17 +1,16 @@
+# Version corrigé sans input
+import streamlit as st
 import requests
 import pandas as pd
+from io import BytesIO
 
-# Clé API TMDb (à remplacer par la tienne)
+# 🔐 Ta clé API TMDb (à personnaliser)
 API_KEY = '26e43b5e331dafd95b1459d14665eb66' #'ta_cle_api_tmdb'
 
+# 📡 Fonction de recherche d'infos
 def get_tv_series_info(title):
-    # Recherche de la série
     search_url = 'https://api.themoviedb.org/3/search/tv'
-    params = {
-        'api_key': API_KEY,
-        'query': title,
-        'language': 'fr-FR'
-    }
+    params = {'api_key': API_KEY, 'query': title, 'language': 'fr-FR'}
     response = requests.get(search_url, params=params)
     results = response.json().get('results')
 
@@ -25,19 +24,10 @@ def get_tv_series_info(title):
         }
 
     tv_id = results[0]['id']
+    details = requests.get(f'https://api.themoviedb.org/3/tv/{tv_id}', params={'api_key': API_KEY, 'language': 'fr-FR'}).json()
+    credits = requests.get(f'https://api.themoviedb.org/3/tv/{tv_id}/credits', params={'api_key': API_KEY}).json()
 
-    # Détails
-    details_url = f'https://api.themoviedb.org/3/tv/{tv_id}'
-    details = requests.get(details_url, params={'api_key': API_KEY, 'language': 'fr-FR'}).json()
-
-    # Crédits
-    credits_url = f'https://api.themoviedb.org/3/tv/{tv_id}/credits'
-    credits = requests.get(credits_url, params={'api_key': API_KEY}).json()
-
-    # Acteur principal
     main_actor = credits.get('cast', [{}])[0].get('name', 'Inconnu')
-
-    # Producteurs
     producers = [p['name'] for p in credits.get('crew', []) if 'Producer' in p.get('job', '')]
     producer = producers[0] if producers else 'Inconnu'
 
@@ -49,21 +39,28 @@ def get_tv_series_info(title):
         'Acteur principal': main_actor
     }
 
-# ✅ Entrée utilisateur
-user_input = input("Entrez les titres des séries, séparés par des virgules :\n")
-titres = [titre.strip() for titre in user_input.split(',') if titre.strip()]
+# 🎨 Interface utilisateur Streamlit
+st.set_page_config(page_title="Recherche de séries", layout="centered")
+st.title("📺 Recherche d'infos sur des séries TV")
 
-# ✅ Traitement de toutes les séries
-resultats = []
-for titre in titres:
-    print(f"📺 Recherche en cours pour : {titre}")
-    info = get_tv_series_info(titre)
-    resultats.append(info)
+user_input = st.text_area("Entrez les titres des séries, séparés par des virgules :", placeholder="Ex : Breaking Bad, Dark, The Office")
 
-# ✅ Affichage + Export
-df = pd.DataFrame(resultats)
-print("\n✅ Résultats récupérés :\n", df)
+if st.button("🔍 Rechercher") and user_input:
+    titres = [t.strip() for t in user_input.split(',') if t.strip()]
+    resultats = [get_tv_series_info(t) for t in titres]
 
-nom_fichier = "infos_series.xlsx"
-df.to_excel(nom_fichier, index=False)
-print(f"\n📁 Données exportées dans : {nom_fichier}")
+    df = pd.DataFrame(resultats)
+    st.success("✅ Résultats trouvés")
+    st.dataframe(df)
+
+    output = BytesIO()
+    df.to_excel(output, index=False, engine='openpyxl')
+    output.seek(0)
+
+    st.download_button(
+        label="⬇️ Télécharger les résultats en Excel",
+        data=output,
+        file_name="infos_series.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
